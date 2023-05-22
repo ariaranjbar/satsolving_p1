@@ -318,7 +318,6 @@ static void assign(int lit) {
   if (!level) {
     fixed++;
   }
-  // {Aria: What is levels?}
 }
 
 static void connect_literal(int lit, Clause *c) {
@@ -532,15 +531,17 @@ static int dpll(void) {
     if (propagate())
       continue;
     backtrack();
-    var = -var;
-    assign(var);
-    if (propagate())
-      continue;
-    while (var < 0) {
-      if (control.empty())
-        return unsatisfiable;
-      var = -trail[control.back()];
-      backtrack();
+    while (true) {
+      var = -var;
+      assign(var);
+      if (propagate())
+        break;
+      while (var < 0) {
+        if(control.empty())
+          return unsatisfiable;
+        var = trail[control.back()];
+        backtrack();
+      }
     }
   }
   return satisfiable;
