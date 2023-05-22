@@ -36,12 +36,12 @@ const char *usage =
 
 static bool witness = true;
 
-static int verbosity;  // -1=quiet, 0=normal, 1=verbose, INT_MAX=logging
+static int verbosity; // -1=quiet, 0=normal, 1=verbose, INT_MAX=logging
 
 // Global options fixed at compile time.
 
 struct Clause {
-  unsigned id;	// For debugging and sorting.
+  unsigned id; // For debugging and sorting.
   unsigned size;
   int literals[];
 
@@ -56,29 +56,29 @@ struct Clause {
   int *end() { return literals + size; }
 };
 
-static int variables;	     // Variable range: 1,..,<variables>
-static signed char *values;  // Assignment 0=unassigned,-1=false,1=true.
-static unsigned *levels;     // Maps variables to their level;
+static int variables;       // Variable range: 1,..,<variables>
+static signed char *values; // Assignment 0=unassigned,-1=false,1=true.
+static unsigned *levels;    // Maps variables to their level;
 
 static std::vector<Clause *> clauses;
 static std::vector<Clause *> *matrix;
 
-static Clause *empty_clause;  // Empty clause found.
+static Clause *empty_clause; // Empty clause found.
 
 static std::vector<int> trail;
 static std::vector<size_t> control;
 
-static unsigned level;	   // Decision level.
-static size_t propagated;  // Next position on trail to propagate.
+static unsigned level;    // Decision level.
+static size_t propagated; // Next position on trail to propagate.
 
 // Statistics:
 
-static size_t added;	     // Number of added clauses.
-static size_t conflicts;     // Number of conflicts.
-static size_t decisions;     // Number of decisions.
-static size_t propagations;  // Number of propagated literals.
-static size_t reports;	     // Number of calls to 'report'.
-static int fixed;	     // Number of root-level assigned variables.
+static size_t added;        // Number of added clauses.
+static size_t conflicts;    // Number of conflicts.
+static size_t decisions;    // Number of decisions.
+static size_t propagations; // Number of propagated literals.
+static size_t reports;      // Number of calls to 'report'.
+static int fixed;           // Number of root-level assigned variables.
 
 // Get process-time of this process.  This is not portable to Windows but
 // should work on other Unixes such as MacOS as is.
@@ -86,7 +86,8 @@ static int fixed;	     // Number of root-level assigned variables.
 static double process_time(void) {
   struct rusage u;
   double res;
-  if (getrusage(RUSAGE_SELF, &u)) return 0;
+  if (getrusage(RUSAGE_SELF, &u))
+    return 0;
   res = u.ru_utime.tv_sec + 1e-6 * u.ru_utime.tv_usec;
   res += u.ru_stime.tv_sec + 1e-6 * u.ru_stime.tv_usec;
   return res;
@@ -95,17 +96,17 @@ static double process_time(void) {
 // Report progress once in a while.
 
 static void report(char type) {
-  if (verbosity < 0) return;
+  if (verbosity < 0)
+    return;
   if (!(reports++ % 20))
-    printf(
-	"c\n"
-	"c             decisions             variables\n"
-	"c   seconds              conflicts            remaining\n"
-	"c\n");
+    printf("c\n"
+           "c             decisions             variables\n"
+           "c   seconds              conflicts            remaining\n"
+           "c\n");
   int remaining = variables - fixed;
   printf("c %c %7.2f %11zu %11zu %9d %3.0f%%\n", type, process_time(),
-	 decisions, conflicts, remaining,
-	 variables ? 100.0 * remaining / variables : 0);
+         decisions, conflicts, remaining,
+         variables ? 100.0 * remaining / variables : 0);
   fflush(stdout);
 }
 
@@ -145,7 +146,8 @@ static char *debug_string(void) {
 }
 
 static char *debug(int lit) {
-  if (!logging()) return 0;
+  if (!logging())
+    return 0;
   char *res = debug_string();
   sprintf(res, "%d", lit);
   int value = values[lit];
@@ -166,7 +168,8 @@ static void debug_suffix(void) {
 }
 
 static void debug(const char *fmt, ...) {
-  if (!logging()) return;
+  if (!logging())
+    return;
   debug_prefix();
   va_list ap;
   va_start(ap, fmt);
@@ -176,21 +179,23 @@ static void debug(const char *fmt, ...) {
 }
 
 static void debug(Clause *c, const char *fmt, ...) {
-  if (!logging()) return;
+  if (!logging())
+    return;
   debug_prefix();
   va_list ap;
   va_start(ap, fmt);
   vprintf(fmt, ap);
   va_end(ap);
   printf(" size %u clause[%u]", c->size, c->id);
-  for (auto lit : *c) printf(" %s", debug(lit));
+  for (auto lit : *c)
+    printf(" %s", debug(lit));
   debug_suffix();
 }
 
 #else
 
-#define debug(...) \
-  do {             \
+#define debug(...)                                                             \
+  do {                                                                         \
   } while (0)
 
 #endif
@@ -198,7 +203,8 @@ static void debug(Clause *c, const char *fmt, ...) {
 // Print message to '<stdout>' and flush it.
 
 static void message(const char *fmt, ...) {
-  if (verbosity < 0) return;
+  if (verbosity < 0)
+    return;
   fputs("c ", stdout);
   va_list ap;
   va_start(ap, fmt);
@@ -209,13 +215,15 @@ static void message(const char *fmt, ...) {
 }
 
 static void line() {
-  if (verbosity < 0) return;
+  if (verbosity < 0)
+    return;
   fputs("c\n", stdout);
   fflush(stdout);
 }
 
 static void verbose(const char *fmt, ...) {
-  if (verbosity <= 0) return;
+  if (verbosity <= 0)
+    return;
   fputs("c ", stdout);
   va_list ap;
   va_start(ap, fmt);
@@ -254,7 +262,8 @@ static void initialize(void) {
   matrix += variables;
   values += variables;
 
-  for (int lit = -variables; lit <= variables; lit++) values[lit] = 0;
+  for (int lit = -variables; lit <= variables; lit++)
+    values[lit] = 0;
 
   assert(!propagated);
   assert(!level);
@@ -266,7 +275,8 @@ static void delete_clause(Clause *c) {
 }
 
 static void release(void) {
-  for (auto c : clauses) delete_clause(c);
+  for (auto c : clauses)
+    delete_clause(c);
 
   matrix -= variables;
   values -= variables;
@@ -279,13 +289,21 @@ static void release(void) {
 
 static bool satisfied(Clause *c) {
   for (auto lit : *c)
-    if (values[lit] > 0) return true;
+    if (values[lit] > 0)
+      return true;
   return false;
 }
 
 // Check whether all clauses are satisfied.
 
-static bool satisfied() { return true; }
+static bool satisfied() {
+  for (int variable = 1; variable != variables; variable++) {
+    if (!values[variable]) {
+      return false;
+    }
+  }
+  return true;
+}
 
 static void assign(int lit) {
   debug("assign %s", debug(lit));
@@ -293,6 +311,14 @@ static void assign(int lit) {
   // Set 'levels[abs(lit)]'.
   // Push literal on trail.
   // If root-level (so level == 0) increase fixed.
+  values[lit] = 1;
+  values[-lit] = -1;
+  trail.push_back(lit);
+  levels[abs(lit)] = level;
+  if (!level) {
+    fixed++;
+  }
+  // {Aria: What is levels?}
 }
 
 static void connect_literal(int lit, Clause *c) {
@@ -312,15 +338,17 @@ static Clause *add_clause(std::vector<int> &literals) {
   c->size = size;
 
   int *q = c->literals;
-  for (auto lit : literals) *q++ = lit;
+  for (auto lit : literals)
+    *q++ = lit;
 
   debug(c, "new");
 
-  clauses.push_back(c);	 // Save it on global stack of clauses.
+  clauses.push_back(c); // Save it on global stack of clauses.
 
   // Connect the literals of the clause in the matrix.
 
-  for (auto lit : *c) connect_literal(lit, c);
+  for (auto lit : *c)
+    connect_literal(lit, c);
 
   // Handle the special case of empty and unit clauses.
 
@@ -359,9 +387,11 @@ static void parse(void) {
   int ch;
   while ((ch = getc(file)) == 'c') {
     while ((ch = getc(file)) != '\n')
-      if (ch == EOF) parse_error("end-of-file in comment");
+      if (ch == EOF)
+        parse_error("end-of-file in comment");
   }
-  if (ch != 'p') parse_error("expected 'c' or 'p'");
+  if (ch != 'p')
+    parse_error("expected 'c' or 'p'");
   int clauses;
   if (fscanf(file, " cnf %d %d", &variables, &clauses) != 2 || variables < 0 ||
       variables >= INT_MAX || clauses < 0 || clauses >= INT_MAX)
@@ -372,7 +402,8 @@ static void parse(void) {
   int lit = 0, parsed = 0;
   size_t literals = 0;
   while (fscanf(file, "%d", &lit) == 1) {
-    if (parsed == clauses) parse_error("too many clauses");
+    if (parsed == clauses)
+      parse_error("too many clauses");
     if (lit == INT_MIN || abs(lit) > variables)
       parse_error("invalid literal '%d'", lit);
     if (lit) {
@@ -384,9 +415,12 @@ static void parse(void) {
       parsed++;
     }
   }
-  if (lit) parse_error("terminating zero missing");
-  if (parsed != clauses) parse_error("clause missing");
-  if (close_file) fclose(file);
+  if (lit)
+    parse_error("terminating zero missing");
+  if (parsed != clauses)
+    parse_error("clause missing");
+  if (close_file)
+    fclose(file);
   verbose("parsed %zu literals in %d clauses", literals, parsed);
 }
 
@@ -405,6 +439,34 @@ static bool propagate(void) {
   // If clause falsified return 'false' (increase 'conflicts').
   // If forcing assign the forced unit.
   // If all literals propagated without finding a falsified clause (conflict):
+  // {Aria: return true}
+  while (propagated != (trail.size())) {
+    int literal_to_propagate = trail[propagated];
+    propagated++;
+    propagations++;
+    for (auto &clause : matrix[-literal_to_propagate]) {
+      if (satisfied(clause)) {
+        continue;
+      }
+      unsigned unassigned_num = 0;
+      int unassigned_lit = 0;
+      for (auto lit : *clause) {
+        if (!values[lit]) {
+          unassigned_num++;
+          unassigned_lit = lit;
+        }
+      }
+      switch (unassigned_num) {
+      case 0:
+        conflicts++;
+        return false;
+      case 1:
+        assign(unassigned_lit);
+      default:
+        break;
+      }
+    }
+  }
   return true;
 }
 
@@ -417,13 +479,26 @@ static int decide(void) {
   // Increase decision level.
   // Save the current trail on the control stack for backtracking.
   // Assign the picked decision literal.
-  if (is_power_of_two(decisions)) report('d');
+  // {Aria: Maybe chage for better heuristic}
+
+  for (int variable = 1; variable != variables; variable++) {
+    if (!values[variable]) {
+      level++;
+      control.push_back(trail.size());
+      res = variable;
+      break;
+    }
+  }
+  if (is_power_of_two(decisions))
+    report('d');
   return res;
 }
 
 static void unassign(int lit) {
   debug("unassign %s", debug(lit));
   // Reset 'values[lit]' and 'values[-lit]'.
+  values[lit] = 0;
+  values[-lit] = 0;
 }
 
 static void backtrack() {
@@ -433,18 +508,50 @@ static void backtrack() {
   // Unassign all literals starting from previous to current trail height.
   // Set 'propagted' to trail height.
   // Decrement decision level.
+  size_t last_trail_head = control.empty() ? 0 : control.back();
+  control.pop_back();
+  for (size_t i = last_trail_head; i < trail.size(); i++) {
+    int lit = trail[i];
+    unassign(lit);
+  }
+  trail.resize(last_trail_head);
+  propagated = last_trail_head;
+  level--;
 }
 
 // The SAT competition standardized exit codes (the 'exit (code)' or 'return
 // res' in 'main').  All other exit codes denote unsolved or error.
 
-static const int satisfiable = 10;    // Exit code for satisfiable and
-static const int unsatisfiable = 20;  // unsatisfiable formulas.
+static const int satisfiable = 10;   // Exit code for satisfiable and
+static const int unsatisfiable = 20; // unsatisfiable formulas.
 
-static int dpll(void) { return 0; }
+static int dpll(void) {
+  while (!satisfied()) {
+    int var = decide();
+    assign(var);
+    if (propagate())
+      continue;
+    backtrack();
+    var = -var;
+    assign(var);
+    if (propagate())
+      continue;
+    while (var < 0) {
+      if (control.empty())
+        return unsatisfiable;
+      var = -trail[control.back()];
+      backtrack();
+    }
+  }
+  return satisfiable;
+}
 
 static int solve(void) {
-  if (empty_clause) return unsatisfiable;
+  if (empty_clause)
+    return unsatisfiable;
+  if (!clauses.size()) {
+    return satisfiable;
+  }
   return dpll();
 }
 
@@ -455,9 +562,11 @@ static int solve(void) {
 static void check_model(void) {
   debug("checking model");
   for (auto c : clauses) {
-    if (satisfied(c)) continue;
+    if (satisfied(c))
+      continue;
     fputs("babysat: unsatisfied clause:\n", stderr);
-    for (auto lit : *c) fprintf(stderr, "%d ", lit);
+    for (auto lit : *c)
+      fprintf(stderr, "%d ", lit);
     fputs("0\n", stderr);
     fflush(stderr);
     abort();
@@ -474,7 +583,8 @@ static void check_model(void) {
 static void print_model(void) {
   printf("v ");
   for (int idx = 1; idx <= variables; idx++) {
-    if (values[idx] < 0) printf("-");
+    if (values[idx] < 0)
+      printf("-");
     printf("%d ", idx);
   }
   printf("0\n");
@@ -489,11 +599,11 @@ static double average(double a, double b) { return b ? a / b : 0; }
 static void print_statistics() {
   double t = process_time();
   printf("c %-15s %16zu %12.2f per second\n", "conflicts:", conflicts,
-	 average(conflicts, t));
+         average(conflicts, t));
   printf("c %-15s %16zu %12.2f per second\n", "decisions:", decisions,
-	 average(decisions, t));
+         average(decisions, t));
   printf("c %-15s %16zu %12.2f million per second\n",
-	 "propagations:", propagations, average(propagations * 1e-6, t));
+         "propagations:", propagations, average(propagations * 1e-6, t));
   printf("c\n");
   printf("c %-15s %16.2f seconds\n", "process-time:", t);
 }
@@ -553,13 +663,15 @@ int main(int argc, char **argv) {
   if (res == 10) {
     check_model();
     printf("s SATISFIABLE\n");
-    if (witness) print_model();
+    if (witness)
+      print_model();
   } else if (res == 20)
     printf("s UNSATISFIABLE\n");
 
   release();
 
-  if (verbosity >= 0) line(), print_statistics(), line();
+  if (verbosity >= 0)
+    line(), print_statistics(), line();
 
   message("exit code %d", res);
 

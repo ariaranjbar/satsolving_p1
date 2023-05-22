@@ -9,7 +9,7 @@ For that you need to implement are the following:
  - assigning literals (`assign`)
  - figuring out when your formula is satisfied (`satisfied`)
  - propagation of literals (`propagate`)
- - variable section heuristics (`decide`)
+ - variable selection heuristics (`decide`)
  - unassigning literals (`unassign`)
  - backtracking (`backtrack`)
  - the DPLL code (`dpll`)
