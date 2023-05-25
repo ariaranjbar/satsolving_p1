@@ -439,19 +439,26 @@ static bool propagate(void) {
   // If forcing assign the forced unit.
   // If all literals propagated without finding a falsified clause (conflict):
   // {Aria: return true}
+  int counter = 0; 
   while (propagated != (trail.size())) {
+    counter++;
     int literal_to_propagate = trail[propagated];
     propagated++;
     propagations++;
     for (auto &clause : matrix[-literal_to_propagate]) {
-      if (satisfied(clause)) {
-        continue;
-      }
       unsigned unassigned_num = 0;
       int unassigned_lit = 0;
       for (auto lit : *clause) {
-        if (!values[lit]) {
+        int lit_val = values[lit];
+        if (lit_val==1) {
+          unassigned_num = -1;
+          break;
+        }
+        if (lit_val == 0) {
           unassigned_num++;
+          if(unassigned_num == 2) {
+            break;
+          }
           unassigned_lit = lit;
         }
       }
@@ -525,8 +532,13 @@ static const int satisfiable = 10;   // Exit code for satisfiable and
 static const int unsatisfiable = 20; // unsatisfiable formulas.
 
 static int dpll(void) {
-  while (!satisfied()) {
+  if(!propagate())
+    return unsatisfiable;
+  while (true) {
     int var = decide();
+    if (!var){
+      break;
+    }
     assign(var);
     if (propagate())
       continue;
@@ -536,12 +548,10 @@ static int dpll(void) {
       assign(var);
       if (propagate())
         break;
-      while (var < 0) {
-        if(control.empty())
+      if (control.empty())
           return unsatisfiable;
-        var = trail[control.back()];
-        backtrack();
-      }
+      var = trail[control.back()];
+      backtrack();
     }
   }
   return satisfiable;
