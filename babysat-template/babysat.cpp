@@ -439,9 +439,7 @@ static bool propagate(void) {
   // If forcing assign the forced unit.
   // If all literals propagated without finding a falsified clause (conflict):
   // {Aria: return true}
-  int counter = 0; 
   while (propagated != (trail.size())) {
-    counter++;
     int literal_to_propagate = trail[propagated];
     propagated++;
     propagations++;
