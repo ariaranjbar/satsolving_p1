@@ -56,14 +56,23 @@ struct Clause {
   int *end() { return literals + size; }
 };
 
+struct ClauseCounter {
+  unsigned id; // For debugging and sorting?
+  unsigned count; // Count of literals left in clause
+  int sum; // Sum of literals left in clause
+};
+
 static int variables;       // Variable range: 1,..,<variables>
 static signed char *values; // Assignment 0=unassigned,-1=false,1=true.
 static unsigned *levels;    // Maps variables to their level;
 
-static std::vector<Clause *> clauses;
-static std::vector<Clause *> *matrix;
+// static std::vector<Clause *> clauses;
+static std::vector<ClauseCounter> counters;
+// static std::vector<Clause *> *matrix;
+static std::vector<ClauseCounter*> *counterMatrix;
 
-static Clause *empty_clause; // Empty clause found.
+// static Clause *empty_clause; // Empty clause found.
+static unsigned empty_counter_id = 0; // Empty clause found.
 
 static std::vector<int> trail;
 static std::vector<size_t> control;
@@ -122,7 +131,10 @@ static void parse_error(const char *fmt, ...)
 
 static void debug(const char *, ...) __attribute__((format(printf, 1, 2)));
 
-static void debug(Clause *, const char *, ...)
+// static void debug(Clause *, const char *, ...)
+//     __attribute__((format(printf, 2, 3)));
+
+static void debug(const ClauseCounter&, const char *, ...)
     __attribute__((format(printf, 2, 3)));
 
 static bool logging() { return verbosity == INT_MAX; }
@@ -178,7 +190,21 @@ static void debug(const char *fmt, ...) {
   debug_suffix();
 }
 
-static void debug(Clause *c, const char *fmt, ...) {
+// static void debug(Clause *c, const char *fmt, ...) {
+//   if (!logging())
+//     return;
+//   debug_prefix();
+//   va_list ap;
+//   va_start(ap, fmt);
+//   vprintf(fmt, ap);
+//   va_end(ap);
+//   printf(" size %u clause[%u]", c->size, c->id);
+//   for (auto lit : *c)
+//     printf(" %s", debug(lit));
+//   debug_suffix();
+// }
+
+static void debug(const ClauseCounter &c, const char *fmt, ...) {
   if (!logging())
     return;
   debug_prefix();
@@ -186,9 +212,7 @@ static void debug(Clause *c, const char *fmt, ...) {
   va_start(ap, fmt);
   vprintf(fmt, ap);
   va_end(ap);
-  printf(" size %u clause[%u]", c->size, c->id);
-  for (auto lit : *c)
-    printf(" %s", debug(lit));
+  printf(" count %u sum %d clause[%u]", c.count, c.sum, c.id);
   debug_suffix();
 }
 
@@ -252,14 +276,16 @@ static void initialize(void) {
   unsigned twice = 2 * size;
 
   values = new signed char[twice];
-  matrix = new std::vector<Clause *>[twice];
+  // matrix = new std::vector<Clause *>[twice];
+  counterMatrix = new std::vector<ClauseCounter*>[twice];
 
   levels = new unsigned[size];
 
   // We subtract 'variables' in order to be able to access
   // the arrays with a negative index (valid in C/C++).
 
-  matrix += variables;
+  // matrix += variables;
+  counterMatrix += variables;
   values += variables;
 
   for (int lit = -variables; lit <= variables; lit++)
@@ -269,48 +295,60 @@ static void initialize(void) {
   assert(!level);
 }
 
-static void delete_clause(Clause *c) {
-  debug(c, "delete");
-  delete[] c;
-}
+// static void delete_clause(Clause *c) {
+//   debug(c, "delete");
+//   delete[] c;
+// }
 
 static void release(void) {
-  for (auto c : clauses)
-    delete_clause(c);
+  // for (auto c : clauses)
+  //   delete_clause(c);
 
-  matrix -= variables;
+  // matrix -= variables;
+  counterMatrix -= variables;
   values -= variables;
 
-  delete[] matrix;
+  // delete[] matrix;
+  delete[] counterMatrix;
   delete[] values;
 
   delete[] levels;
 }
 
-static bool satisfied(Clause *c) {
-  for (auto lit : *c)
-    if (values[lit] > 0)
-      return true;
-  return false;
+// static bool satisfied(Clause *c) {
+//   for (auto lit : *c)
+//     if (values[lit] > 0)
+//       return true;
+//   return false;
+// }
+
+static bool falsified(const ClauseCounter &c) {
+  return (c.count == 0);
 }
 
 // Check whether all clauses are satisfied.
 
-static bool satisfied() {
-  for (int variable = 1; variable != variables; variable++) {
-    if (!values[variable]) {
-      return false;
-    }
-  }
-  return true;
-}
+// static bool satisfied() {
+//   for (int variable = 1; variable != variables; variable++) {
+//     if (!values[variable]) {
+//       return false;
+//     }
+//   }
+//   for (auto& c: counters) {
+//     if (!(c.count))
+//       return false;
+//   }
+//   return true;
+// }
 
-static void assign(int lit) {
+static bool assign(int lit) {
   debug("assign %s", debug(lit));
   // Set 'values[lit]' and 'values[-lit]'.
   // Set 'levels[abs(lit)]'.
   // Push literal on trail.
   // If root-level (so level == 0) increase fixed.
+  if(values[lit])
+    return false;
   values[lit] = 1;
   values[-lit] = -1;
   trail.push_back(lit);
@@ -318,50 +356,97 @@ static void assign(int lit) {
   if (!level) {
     fixed++;
   }
+  return true;
 }
 
-static void connect_literal(int lit, Clause *c) {
+// static void connect_literal(int lit, Clause *c) {
+//   debug(c, "connecting %s to", debug(lit));
+//   matrix[lit].push_back(c);
+// }
+
+static void connect_literal(int lit, ClauseCounter &c) {
   debug(c, "connecting %s to", debug(lit));
-  matrix[lit].push_back(c);
+  counterMatrix[lit].push_back(&c);
 }
 
-static Clause *add_clause(std::vector<int> &literals) {
-  size_t size = literals.size();
-  size_t bytes = sizeof(struct Clause) + size * sizeof(int);
-  Clause *c = (Clause *)new char[bytes];
+// static Clause *add_clause(std::vector<int> &literals) {
+//   size_t size = literals.size();
+//   size_t bytes = sizeof(struct Clause) + size * sizeof(int);
+//   Clause *c = (Clause *)new char[bytes];
 
-  assert(size <= UINT_MAX);
-  c->id = added++;
+//   assert(size <= UINT_MAX);
+//   c->id = added++;
 
-  assert(clauses.size() <= (size_t)INT_MAX);
-  c->size = size;
+//   assert(clauses.size() <= (size_t)INT_MAX);
+//   c->size = size;
 
-  int *q = c->literals;
-  for (auto lit : literals)
-    *q++ = lit;
+//   int *q = c->literals;
+//   for (auto lit : literals)
+//     *q++ = lit;
+
+//   debug(c, "new");
+
+//   clauses.push_back(c); // Save it on global stack of clauses.
+
+//   // Connect the literals of the clause in the matrix.
+
+//   for (auto lit : *c)
+//     connect_literal(lit, c);
+
+//   // Handle the special case of empty and unit clauses.
+
+//   if (!size) {
+//     debug(c, "parsed empty clause");
+//     empty_clause = c;
+//   } else if (size == 1) {
+//     int unit = literals[0];
+//     signed char value = values[unit];
+//     if (!value)
+//       assign(unit);
+//     else if (value < 0) {
+//       debug(c, "inconsistent unit clause");
+//       empty_clause = c;
+//     }
+//   }
+
+//   return c;
+// }
+
+static ClauseCounter add_clause(std::vector<int> &literals) {
+  int sum = 0;
+  for (auto lit : literals) {
+    // assert(INT_MAX - lit >= sum);
+    sum += lit;
+  }
+  size_t count = literals.size();
+  assert(count <= UINT_MAX);
+
+  assert(counters.size() <= (size_t)INT_MAX);
+
+  ClauseCounter c {++added, count, sum};
 
   debug(c, "new");
 
-  clauses.push_back(c); // Save it on global stack of clauses.
+  counters.push_back(c); // Save it on global stack of counters.
 
-  // Connect the literals of the clause in the matrix.
-
-  for (auto lit : *c)
-    connect_literal(lit, c);
+  for (auto lit : literals) {
+    ClauseCounter* c = &counters.back();
+    connect_literal(lit, *c);
+  }
 
   // Handle the special case of empty and unit clauses.
 
-  if (!size) {
+  if (!count) {
     debug(c, "parsed empty clause");
-    empty_clause = c;
-  } else if (size == 1) {
+    empty_counter_id = c.id;
+  } else if (count == 1) {
     int unit = literals[0];
     signed char value = values[unit];
     if (!value)
       assign(unit);
     else if (value < 0) {
       debug(c, "inconsistent unit clause");
-      empty_clause = c;
+      empty_counter_id = c.id;
     }
   }
 
@@ -429,6 +514,51 @@ static void parse(void) {
 // conflict propagating a literal also detects unit clauses and
 // then assign the forced literal by that unit clause.
 
+// static bool propagate(void) {
+//   // While not all literals propagated.
+//   // Propagated next literal 'lit' on trail.
+//   // Increase 'propagations'.
+//   // Go over all clauses in which '-lit' occurs.
+//   // For each clause check whether it is satisfied, falsified, or forcing.
+//   // If clause falsified return 'false' (increase 'conflicts').
+//   // If forcing assign the forced unit.
+//   // If all literals propagated without finding a falsified clause (conflict):
+//   // {Aria: return true}
+//   while (propagated != (trail.size())) {
+//     int literal_to_propagate = trail[propagated];
+//     propagated++;
+//     propagations++;
+//     for (auto &clause : matrix[-literal_to_propagate]) {
+//       unsigned unassigned_num = 0;
+//       int unassigned_lit = 0;
+//       for (auto lit : *clause) {
+//         int lit_val = values[lit];
+//         if (lit_val==1) {
+//           unassigned_num = -1;
+//           break;
+//         }
+//         if (lit_val == 0) {
+//           unassigned_num++;
+//           if(unassigned_num == 2) {
+//             break;
+//           }
+//           unassigned_lit = lit;
+//         }
+//       }
+//       switch (unassigned_num) {
+//       case 0:
+//         conflicts++;
+//         return false;
+//       case 1:
+//         assign(unassigned_lit);
+//       default:
+//         break;
+//       }
+//     }
+//   }
+//   return true;
+// }
+
 static bool propagate(void) {
   // While not all literals propagated.
   // Propagated next literal 'lit' on trail.
@@ -443,31 +573,18 @@ static bool propagate(void) {
     int literal_to_propagate = trail[propagated];
     propagated++;
     propagations++;
-    for (auto &clause : matrix[-literal_to_propagate]) {
-      unsigned unassigned_num = 0;
-      int unassigned_lit = 0;
-      for (auto lit : *clause) {
-        int lit_val = values[lit];
-        if (lit_val==1) {
-          unassigned_num = -1;
-          break;
-        }
-        if (lit_val == 0) {
-          unassigned_num++;
-          if(unassigned_num == 2) {
-            break;
-          }
-          unassigned_lit = lit;
-        }
+    for (auto c : counterMatrix[-literal_to_propagate]) {
+      ClauseCounter &counter = *c;
+      counter.count--;
+      counter.sum += literal_to_propagate;
+      if (counter.count == 1) {
+        if(!assign(counter.sum))
+          return false;
       }
-      switch (unassigned_num) {
-      case 0:
+      else if (counter.count == 0){
+        // empty_counter_id = counter.id;
         conflicts++;
         return false;
-      case 1:
-        assign(unassigned_lit);
-      default:
-        break;
       }
     }
   }
@@ -483,9 +600,9 @@ static int decide(void) {
   // Increase decision level.
   // Save the current trail on the control stack for backtracking.
   // Assign the picked decision literal.
-  // {Aria: Maybe chage for better heuristic}
+  // {Aria: Maybe change for better heuristic}
 
-  for (int variable = 1; variable != variables; variable++) {
+  for (int variable = 1; variable <= variables; variable++) {
     if (!values[variable]) {
       level++;
       control.push_back(trail.size());
@@ -505,6 +622,24 @@ static void unassign(int lit) {
   values[-lit] = 0;
 }
 
+// static void backtrack() {
+//   assert(level);
+//   debug("backtracking to level %d", level - 1);
+//   // Pop previous trail from control stack.
+//   // Unassign all literals starting from previous to current trail height.
+//   // Set 'propagted' to trail height.
+//   // Decrement decision level.
+//   size_t last_trail_head = control.empty() ? 0 : control.back();
+//   control.pop_back();
+//   for (size_t i = last_trail_head; i < trail.size(); i++) {
+//     int lit = trail[i];
+//     unassign(lit);
+//   }
+//   trail.resize(last_trail_head);
+//   propagated = last_trail_head;
+//   level--;
+// }
+
 static void backtrack() {
   assert(level);
   debug("backtracking to level %d", level - 1);
@@ -515,8 +650,13 @@ static void backtrack() {
   size_t last_trail_head = control.empty() ? 0 : control.back();
   control.pop_back();
   for (size_t i = last_trail_head; i < trail.size(); i++) {
-    int lit = trail[i];
-    unassign(lit);
+    int literal_to_backtrack = trail[i];
+    for (auto c : counterMatrix[-literal_to_backtrack]) {
+      ClauseCounter &counter = *c;
+      counter.count++;
+      counter.sum -= literal_to_backtrack;
+    }
+    unassign(literal_to_backtrack);
   }
   trail.resize(last_trail_head);
   propagated = last_trail_head;
@@ -555,10 +695,19 @@ static int dpll(void) {
   return satisfiable;
 }
 
+// static int solve(void) {
+//   if (empty_clause)
+//     return unsatisfiable;
+//   if (!clauses.size()) {
+//     return satisfiable;
+//   }
+//   return dpll();
+// }
+
 static int solve(void) {
-  if (empty_clause)
+  if (empty_counter_id)
     return unsatisfiable;
-  if (!clauses.size()) {
+  if (!counters.size()) {
     return satisfiable;
   }
   return dpll();
@@ -570,16 +719,25 @@ static int solve(void) {
 
 static void check_model(void) {
   debug("checking model");
-  for (auto c : clauses) {
-    if (satisfied(c))
-      continue;
-    fputs("babysat: unsatisfied clause:\n", stderr);
-    for (auto lit : *c)
-      fprintf(stderr, "%d ", lit);
-    fputs("0\n", stderr);
-    fflush(stderr);
-    abort();
-    exit(1);
+  for (auto &c : counters) {
+    if (falsified(c)) {
+      fputs("babysat: falsified clause:\n", stderr);
+      fprintf(stderr, "%d ", c.id);
+      fputs("0\n", stderr);
+      fflush(stderr);
+      abort();
+      exit(1);
+    }
+  }
+  for (int v = 1; v <= variables; v++) {
+    if (!values[v]) {
+      fputs("babysat: unassigned value:\n", stderr);
+      fprintf(stderr, "%u ", v);
+      fputs("0\n", stderr);
+      fflush(stderr);
+      abort();
+      exit(1);
+    }
   }
 }
 
